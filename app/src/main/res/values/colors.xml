@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backgrounds -->
+    <color name="bg_primary">#0B0B1A</color>
+    <color name="bg_surface">#13132A</color>
+    <color name="bg_card">#1C1C36</color>
+    <color name="bg_card_elevated">#22223E</color>
+    <color name="bg_input">#0F0F24</color>
+
+    <!-- Accent -->
+    <color name="accent">#00C9A7</color>
+    <color name="accent_dark">#009E84</color>
+
+    <!-- Money -->
+    <color name="money_positive">#00C9A7</color>
+    <color name="money_negative">#FF6B6B</color>
+    <color name="money_gold">#FFD166</color>
+
+    <!-- Text -->
+    <color name="text_primary">#F0F0FF</color>
+    <color name="text_secondary">#7B8AA0</color>
+    <color name="text_hint">#3A4A60</color>
+
+    <!-- Borders -->
+    <color name="border_subtle">#16162E</color>
+    <color name="border_normal">#22223E</color>
+
+    <!-- Status -->
+    <color name="settled_bg">#0C2420</color>
+    <color name="settled_text">#00C9A7</color>
+    <color name="pending_bg">#2E1414</color>
+    <color name="pending_text">#FF6B6B</color>
+
+    <!-- Navigation -->
+    <color name="nav_bg">#0D0D20</color>
+    <color name="nav_active">#00C9A7</color>
+    <color name="nav_inactive">#3D4A60</color>
+
+    <!-- Legacy aliases kept so old references don't break -->
+    <color name="bg_dark">#0B0B1A</color>
+    <color name="card_dark">#1C1C36</color>
+    <color name="accent_teal">#00C9A7</color>
+    <color name="status_settled">#0C2420</color>
+    <color name="status_settled_text">#00C9A7</color>
+    <color name="status_pending">#2E1414</color>
+    <color name="status_pending_text">#FF6B6B</color>
+    <color name="text_white">#F0F0FF</color>
+    <color name="text_gray">#7B8AA0</color>
+</resources>

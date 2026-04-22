@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">FuelSplit</string>
+    <string name="nav_trips">Trips</string>
+    <string name="nav_balances">Balances</string>
+    <string name="empty_title">No trips yet</string>
+    <string name="empty_subtitle">Tap + below to log your first ride</string>
+    <string name="all_settled">All settled up! ✓</string>
+    <string name="delete_trip_title">Delete Trip</string>
+</resources>
