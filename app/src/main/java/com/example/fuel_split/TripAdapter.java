@@ -40,7 +40,7 @@ public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder
         holder.total.setText("₹" + trip.getTotal());
         holder.paidBy.setText("Paid by: " + trip.getPaidBy());
 
-        // Build member initials string  e.g. "R A V"
+        // Build member initials string e.g. "R A V"
         String raw = trip.getMembers().replace("[", "").replace("]", "");
         String[] names = raw.split(",");
         StringBuilder initials = new StringBuilder();

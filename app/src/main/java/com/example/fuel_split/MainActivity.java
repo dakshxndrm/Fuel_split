@@ -13,7 +13,15 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import android.view.ViewGroup;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import java.util.*;
+import org.web3j.crypto.Credentials;
+import android.content.SharedPreferences;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -25,13 +33,43 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        SharedPreferences prefs = getSharedPreferences("fuelsplit", MODE_PRIVATE);
+        if (!prefs.contains("username")) {
+            startActivity(new Intent(this, OnboardingActivity.class));
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_main);
+
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
+        View rootMain   = findViewById(R.id.rootMain);
+        View headerView = findViewById(R.id.appHeader);
+        View navView    = findViewById(R.id.bottom_nav);
+        final int headerSidePad = headerView.getPaddingLeft();
+        final int navBaseHeight  = dp(72);
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootMain, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+            headerView.setPadding(headerSidePad, bars.top + dp(20),
+                    headerSidePad, dp(16));
+
+            ViewGroup.LayoutParams lp = navView.getLayoutParams();
+            lp.height = navBaseHeight + bars.bottom;
+            navView.setLayoutParams(lp);
+            navView.setPadding(navView.getPaddingLeft(), 0,
+                    navView.getPaddingRight(), bars.bottom);
+
+            return insets;
+        });
 
         tripsLayout       = findViewById(R.id.tripsLayout);
         balancesLayout    = findViewById(R.id.balancesLayout);
         balancesContainer = findViewById(R.id.balancesContainer);
         emptyState        = findViewById(R.id.emptyState);
         tvSubtitle        = findViewById(R.id.tvSubtitle);
+        ExtendedFloatingActionButton fabAddTrip = findViewById(R.id.fabAddTrip);
 
         loadData();
 
@@ -72,9 +110,38 @@ public class MainActivity extends AppCompatActivity {
                 });
 
         // FAB launches Add Trip screen
-        findViewById(R.id.fabAddTrip)
-                .setOnClickListener(v -> startActivityForResult(
-                        new Intent(this, AddTripActivity.class), 100));
+        fabAddTrip.setOnClickListener(v -> {
+            startActivity(new Intent(this, GroupsActivity.class));
+        });
+        new Thread(() -> {
+            try {
+                WalletManager wm = new WalletManager(this);
+                Credentials creds = wm.getOrCreateWallet();
+                String myAddress = creds.getAddress();
+                android.util.Log.d("FUELSPLIT", "Wallet: " + myAddress);
+
+                BlockchainManager bm = new BlockchainManager();
+                ContractManager cm = new ContractManager(bm.getWeb3(), creds);
+
+                boolean already = cm.isRegistered(myAddress);
+                if (already) {
+                    android.util.Log.d("FUELSPLIT", "Already registered on-chain");
+                    runOnUiThread(() -> android.widget.Toast.makeText(
+                            this, "Already registered on-chain ✓", android.widget.Toast.LENGTH_LONG).show());
+                } else {
+                    String txHash = cm.register("Daksh", "");
+                    android.util.Log.d("FUELSPLIT", "Register tx: " + txHash);
+                    boolean nowReg = cm.isRegistered(myAddress);
+                    runOnUiThread(() -> android.widget.Toast.makeText(
+                            this, nowReg ? "Registered on-chain ✓" : "Register sent, not confirmed",
+                            android.widget.Toast.LENGTH_LONG).show());
+                }
+            } catch (Exception e) {
+                android.util.Log.e("FUELSPLIT", "Error", e);
+                runOnUiThread(() -> android.widget.Toast.makeText(
+                        this, "Error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show());
+            }
+        }).start();
     }
 
     // ── Update empty state visibility ──────────────────────────────────────
@@ -254,5 +321,10 @@ public class MainActivity extends AppCompatActivity {
                 new TypeToken<ArrayList<Trip>>() {}.getType());
 
         if (tripList == null) tripList = new ArrayList<>();
+    }
+
+    // ── Utility method for converting dp to pixels ──────────────────────
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 }

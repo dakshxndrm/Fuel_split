@@ -13,6 +13,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import java.util.*;
 
+
 public class AddTripActivity extends AppCompatActivity {
 
     private ViewFlipper viewFlipper;
@@ -200,11 +201,12 @@ public class AddTripActivity extends AppCompatActivity {
         btn.setText(label);
         btn.setTextSize(14);
         btn.setAllCaps(false);
-        
+
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                0, 48, 1f);
+                0, 52, 1f);
         params.setMargins(0, 0, 8, 0);
         btn.setLayoutParams(params);
+        btn.setStateListAnimator(null);
 
         btn.setOnClickListener(v -> updateSplitMode(mode));
         return btn;
@@ -244,11 +246,13 @@ public class AddTripActivity extends AppCompatActivity {
     // ── Update button visual state ────────────────────────────────────────
     private void updateButtonState(Button btn, boolean selected) {
         if (selected) {
-            btn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.accent));
-            btn.setTextColor(0xFF0F1419);
+            btn.setBackgroundResource(R.drawable.bg_segment_selected);
+            btn.setTextColor(0xFF0A0E1A);
+            btn.setTypeface(null, android.graphics.Typeface.BOLD);
         } else {
-            btn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.border_normal));
-            btn.setTextColor(0xFF7B8AA0);
+            btn.setBackgroundResource(R.drawable.bg_segment_unselected);
+            btn.setTextColor(0xFF8B98AE);
+            btn.setTypeface(null, android.graphics.Typeface.NORMAL);
         }
     }
 

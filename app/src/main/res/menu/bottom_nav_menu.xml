@@ -2,10 +2,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/trips"
-        android:icon="@drawable/ic_trips"
+        android:icon="@drawable/ic_nav_trips"
         android:title="@string/nav_trips"/>
     <item
         android:id="@+id/balances"
-        android:icon="@drawable/ic_balance"
+        android:icon="@drawable/ic_nav_balance"
         android:title="@string/nav_balances"/>
 </menu>
