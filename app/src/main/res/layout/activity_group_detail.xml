@@ -42,13 +42,28 @@
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
 
+        <!-- Delete group button -->
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnEditGroup"
+            android:id="@+id/btnDeleteGroup"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
-            android:text="Edit"
+            android:text="Delete"
+            android:textColor="@color/money_negative"
+            android:textSize="13sp"
+            android:textAllCaps="false"
+            app:backgroundTint="@color/accent_soft"
+            app:cornerRadius="10dp"
+            app:strokeColor="@color/money_negative"
+            app:strokeWidth="1dp"
+            android:layout_marginEnd="8dp"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAddMember"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="+ Member"
             android:textColor="@color/accent"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textAllCaps="false"
             app:backgroundTint="@color/accent_soft"
             app:cornerRadius="10dp"
@@ -76,13 +91,12 @@
             android:paddingHorizontal="16dp"
             android:paddingBottom="100dp">
 
-            <!-- Members section -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Members"
+                android:text="MEMBERS"
                 android:textColor="@color/text_secondary"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:letterSpacing="0.08"
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="10dp"/>
@@ -92,54 +106,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"/>
-
-            <!-- Balances section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Balances"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:letterSpacing="0.08"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="10dp"/>
-
-            <LinearLayout
-                android:id="@+id/balancesContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"/>
-
-            <!-- Expenses section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Expenses"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:letterSpacing="0.08"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="10dp"/>
-
-            <LinearLayout
-                android:id="@+id/expensesContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"/>
-
-            <TextView
-                android:id="@+id/tvNoExpenses"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="No expenses yet"
-                android:textColor="@color/text_hint"
-                android:textSize="14sp"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"/>
         </LinearLayout>
     </ScrollView>
 
-    <!-- Bottom bar -->
+    <!-- Bottom bar: Add Expense -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -151,31 +121,14 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAddExpense"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="54dp"
-            android:layout_weight="1"
-            android:text="+ Add Expense"
+            android:text="+ Add Trip Expense"
             android:textColor="@color/bg_primary"
             android:textSize="15sp"
             android:textStyle="bold"
             android:textAllCaps="false"
             app:backgroundTint="@color/accent"
-            app:cornerRadius="14dp"
-            android:layout_marginEnd="8dp"/>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSettle"
-            android:layout_width="0dp"
-            android:layout_height="54dp"
-            android:layout_weight="1"
-            android:text="Settle Up"
-            android:textColor="@color/accent"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textAllCaps="false"
-            app:backgroundTint="@color/accent_soft"
-            app:cornerRadius="14dp"
-            app:strokeColor="@color/accent"
-            app:strokeWidth="1dp"/>
+            app:cornerRadius="14dp"/>
     </LinearLayout>
 </LinearLayout>

@@ -92,12 +92,31 @@
                     android:inputType="textCapWords"
                     android:layout_marginBottom="24dp"/>
 
+                <!-- Selectable list: contacts + group members -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Add Members"
+                    android:text="PEOPLE"
                     android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.08"
+                    android:layout_marginBottom="8dp"/>
+
+                <LinearLayout
+                    android:id="@+id/contactsListContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="20dp"/>
+
+                <!-- Friend-code input for new people -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="OR ADD BY FRIEND CODE"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.08"
                     android:layout_marginBottom="8dp"/>
 
                 <LinearLayout
@@ -112,13 +131,13 @@
                         android:layout_width="0dp"
                         android:layout_height="54dp"
                         android:layout_weight="1"
-                        android:hint="Enter name"
+                        android:hint="Friend code"
                         android:textColor="@color/text_primary"
                         android:textColorHint="@color/text_hint"
                         android:textSize="15sp"
                         android:paddingHorizontal="16dp"
                         android:background="@drawable/bg_input"
-                        android:inputType="textCapWords"/>
+                        android:inputType="text"/>
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnAddPerson"
@@ -153,6 +172,31 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="20dp">
+
+                <!-- Trip name — only shown when launched from a group (preload mode) -->
+                <TextView
+                    android:id="@+id/tvTripNamePreloadLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Trip Name"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone"/>
+
+                <EditText
+                    android:id="@+id/etTripNamePreload"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:hint="e.g. Weekend trip to Pushkar"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:textSize="15sp"
+                    android:paddingHorizontal="16dp"
+                    android:background="@drawable/bg_input"
+                    android:inputType="textCapWords"
+                    android:layout_marginBottom="20dp"
+                    android:visibility="gone"/>
 
                 <TextView
                     android:layout_width="wrap_content"

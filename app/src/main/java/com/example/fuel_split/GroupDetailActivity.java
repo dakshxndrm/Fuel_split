@@ -1,18 +1,13 @@
 package com.example.fuel_split;
 
+import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
+import android.content.Intent;
 import android.os.Bundle;
-import android.text.InputType;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,10 +15,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.chip.Chip;
-import com.google.android.material.chip.ChipGroup;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
 import org.web3j.crypto.Credentials;
 
@@ -35,45 +26,61 @@ public class GroupDetailActivity extends AppCompatActivity {
 
     public static final String EXTRA_GROUP_ADDRESS = "group_address";
 
-    private String  groupAddress;
-    private TextView  tvGroupName, tvMemberCount, tvNoExpenses;
-    private LinearLayout membersContainer, balancesContainer, expensesContainer;
+    private String       groupAddress;
+    private TextView     tvGroupName, tvMemberCount;
+    private LinearLayout membersContainer;
 
     private WalletManager     wm;
     private BlockchainManager bm;
     private ContractManager   cm;
     private Credentials       creds;
 
-    private List<String> currentMembers    = new ArrayList<>();
-    private String       currentGroupName  = "";
-    // Addresses / amounts where current user is the debtor (used by Settle dialog)
-    private List<String> debtorAddresses   = new ArrayList<>();
-    private List<Long>   debtAmountsPaise  = new ArrayList<>();
+    private List<String> currentMembers   = new ArrayList<>();
+    private String       currentGroupName = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_group_detail);
 
-        groupAddress      = getIntent().getStringExtra(EXTRA_GROUP_ADDRESS);
-        tvGroupName       = findViewById(R.id.tvDetailGroupName);
-        tvMemberCount     = findViewById(R.id.tvDetailMemberCount);
-        tvNoExpenses      = findViewById(R.id.tvNoExpenses);
-        membersContainer  = findViewById(R.id.membersContainer);
-        balancesContainer = findViewById(R.id.balancesContainer);
-        expensesContainer = findViewById(R.id.expensesContainer);
+        groupAddress     = getIntent().getStringExtra(EXTRA_GROUP_ADDRESS);
+        tvGroupName      = findViewById(R.id.tvDetailGroupName);
+        tvMemberCount    = findViewById(R.id.tvDetailMemberCount);
+        membersContainer = findViewById(R.id.membersContainer);
 
-        findViewById(R.id.btnEditGroup).setOnClickListener(v -> showEditDialog());
+        // Stage 6: Add Expense → fuel-calc flow preloaded with this group
         findViewById(R.id.btnAddExpense).setOnClickListener(v -> {
-            if (currentMembers.isEmpty()) { toast("Loading group data, please wait…"); return; }
-            showAddExpenseDialog();
-        });
-        findViewById(R.id.btnSettle).setOnClickListener(v -> {
-            if (debtorAddresses.isEmpty()) { toast("You don't owe anyone in this group"); return; }
-            showSettleDialog();
+            if (currentMembers.isEmpty()) { toast("Loading group, please wait…"); return; }
+            Intent intent = new Intent(this, AddTripActivity.class);
+            intent.putExtra(AddTripActivity.EXTRA_PRELOAD_GROUP, groupAddress);
+            startActivity(intent);
         });
 
+        // Add member by friend code
+        findViewById(R.id.btnAddMember).setOnClickListener(v -> {
+            if (cm == null) { toast("Connecting, please wait…"); return; }
+            showAddMemberDialog();
+        });
+
+        // Leave / delete group (removes self from the group on-chain)
+        findViewById(R.id.btnDeleteGroup).setOnClickListener(v -> {
+            if (cm == null) { toast("Connecting, please wait…"); return; }
+            new AlertDialog.Builder(this)
+                    .setTitle("Leave Group")
+                    .setMessage("Remove yourself from \"" + currentGroupName + "\"?")
+                    .setPositiveButton("Leave", (d, w) -> leaveGroup())
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+
+        ContactStore.seedNameResolver(this);
         initBlockchain();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (cm != null) loadGroupData();
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────
@@ -101,11 +108,8 @@ public class GroupDetailActivity extends AppCompatActivity {
                 currentMembers   = members;
                 runOnUiThread(() -> {
                     tvGroupName.setText(name);
-                    tvMemberCount.setText(members.size() + " members");
+                    tvMemberCount.setText(members.size() + " member" + (members.size() == 1 ? "" : "s"));
                     renderMembers(members);
-                    renderBalances(members);
-                    renderExpenses(loadExpensesFromPrefs());
-                    loadPendingSettlements();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> toast("Load error: " + e.getMessage()));
@@ -113,506 +117,243 @@ public class GroupDetailActivity extends AppCompatActivity {
         }).start();
     }
 
-    // ── Members ───────────────────────────────────────────────────────────────
+    // ── Members list (name + Remove + Settle per row) ─────────────────────────
 
     private void renderMembers(List<String> members) {
         membersContainer.removeAllViews();
+        String myAddr = creds != null ? creds.getAddress().toLowerCase() : "";
+
         for (String addr : members) {
-            TextView tv = new TextView(this);
-            tv.setText("• " + addr.substring(0, 10) + "…" + addr.substring(addr.length() - 4));
-            tv.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-            tv.setTextSize(14);
-            tv.setPadding(0, 8, 0, 8);
-            membersContainer.addView(tv);
-        }
-    }
+            boolean isMe = addr.equalsIgnoreCase(myAddr);
 
-    // ── Balances ──────────────────────────────────────────────────────────────
-
-    private void renderBalances(List<String> members) {
-        balancesContainer.removeAllViews();
-        debtorAddresses.clear();
-        debtAmountsPaise.clear();
-
-        String myAddr = creds.getAddress().toLowerCase();
-        new Thread(() -> {
-            for (String other : members) {
-                if (other.equalsIgnoreCase(myAddr)) continue;
-                try {
-                    long bal = cm.getBalance(groupAddress, myAddr, other);
-                    String label;
-                    int    color;
-                    if (bal > 0) {
-                        label = "You owe " + shortAddr(other) + "  ₹" + (bal / 100);
-                        color = R.color.money_negative;
-                        debtorAddresses.add(other);
-                        debtAmountsPaise.add(bal);
-                    } else if (bal < 0) {
-                        label = shortAddr(other) + " owes you  ₹" + (Math.abs(bal) / 100);
-                        color = R.color.money_positive;
-                    } else {
-                        label = "Settled with " + shortAddr(other);
-                        color = R.color.text_secondary;
-                    }
-                    String fLabel = label;
-                    int    fColor = color;
-                    runOnUiThread(() -> {
-                        TextView tv = new TextView(this);
-                        tv.setText(fLabel);
-                        tv.setTextColor(ContextCompat.getColor(this, fColor));
-                        tv.setTextSize(15);
-                        tv.setPadding(0, 10, 0, 10);
-                        balancesContainer.addView(tv);
-                    });
-                } catch (Exception ignored) {}
-            }
-        }).start();
-    }
-
-    // ── Pending settlement confirmations ──────────────────────────────────────
-
-    private void loadPendingSettlements() {
-        new Thread(() -> {
-            try {
-                List<ContractManager.SettlementRecord> all = cm.getSettlements(groupAddress);
-                String myAddr = creds.getAddress().toLowerCase();
-                List<ContractManager.SettlementRecord> pending = new ArrayList<>();
-                for (ContractManager.SettlementRecord r : all) {
-                    if (!r.confirmed && r.creditor.equalsIgnoreCase(myAddr)) pending.add(r);
-                }
-                if (!pending.isEmpty()) runOnUiThread(() -> renderPendingSettlements(pending));
-            } catch (Exception ignored) {}
-        }).start();
-    }
-
-    private void renderPendingSettlements(List<ContractManager.SettlementRecord> pending) {
-        TextView header = new TextView(this);
-        header.setText("Pending Confirmations");
-        header.setTextColor(ContextCompat.getColor(this, R.color.money_gold));
-        header.setTextSize(13);
-        header.setLetterSpacing(0.08f);
-        header.setPadding(0, dp(20), 0, dp(8));
-        balancesContainer.addView(header);
-
-        for (ContractManager.SettlementRecord r : pending) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(8), 0, dp(8));
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setBackgroundResource(R.drawable.bg_input);
+            row.setPadding(dp(16), dp(14), dp(16), dp(14));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, 0, 0, dp(8));
+            row.setLayoutParams(params);
 
-            TextView tv = new TextView(this);
-            tv.setText(shortAddr(r.debtor) + " paid you  ₹" + (r.amountPaise / 100));
-            tv.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-            tv.setTextSize(14);
-            tv.setLayoutParams(new LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            row.addView(tv);
+            // Name label — resolves async
+            TextView tvName = new TextView(this);
+            tvName.setText((isMe ? "You" : NameResolver.nameFor(addr)));
+            tvName.setTextColor(isMe
+                    ? ContextCompat.getColor(this, R.color.accent)
+                    : ContextCompat.getColor(this, R.color.text_primary));
+            tvName.setTextSize(15);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(tvName);
 
-            MaterialButton btn = new MaterialButton(this);
-            btn.setText("Confirm");
-            btn.setTextSize(12f);
-            btn.setAllCaps(false);
-            btn.setTextColor(ContextCompat.getColor(this, R.color.bg_primary));
-            btn.setBackgroundTintList(ColorStateList.valueOf(
-                    ContextCompat.getColor(this, R.color.money_positive)));
-            int id = r.index;
-            btn.setOnClickListener(v -> {
-                btn.setEnabled(false);
+            // Async name update for non-self members
+            if (!isMe) {
                 new Thread(() -> {
                     try {
-                        cm.confirmSettlement(groupAddress, id);
-                        runOnUiThread(() -> {
-                            row.setVisibility(View.GONE);
-                            toast("Settlement confirmed!");
-                            loadGroupData();
-                        });
-                    } catch (Exception e) {
-                        runOnUiThread(() -> {
-                            btn.setEnabled(true);
-                            toast("Error: " + e.getMessage());
-                        });
-                    }
+                        String[] info = ProfileClient.lookupByAddress(addr);
+                        if (info != null && info.length > 1 && !info[1].isEmpty()) {
+                            NameResolver.seed(addr, info[1]);
+                            ContactStore.addContact(this, info[0], info[1], addr);
+                            runOnUiThread(() -> tvName.setText(info[1]));
+                        }
+                    } catch (Exception ignored) {}
                 }).start();
-            });
-            row.addView(btn);
-            balancesContainer.addView(row);
+            }
+
+            if (!isMe) {
+                // Settle button — marks this member has paid their share
+                MaterialButton btnSettle = new MaterialButton(this,
+                        null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+                btnSettle.setText("Settle");
+                btnSettle.setTextSize(11f);
+                btnSettle.setAllCaps(false);
+                btnSettle.setTextColor(ContextCompat.getColor(this, R.color.money_positive));
+                LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+                btnParams.setMargins(dp(8), 0, 0, 0);
+                btnSettle.setLayoutParams(btnParams);
+                btnSettle.setOnClickListener(v -> settleForMember(addr, btnSettle));
+                row.addView(btnSettle);
+
+                // Remove button
+                MaterialButton btnRemove = new MaterialButton(this,
+                        null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+                btnRemove.setText("Remove");
+                btnRemove.setTextSize(11f);
+                btnRemove.setAllCaps(false);
+                btnRemove.setTextColor(ContextCompat.getColor(this, R.color.money_negative));
+                LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+                removeParams.setMargins(dp(6), 0, 0, 0);
+                btnRemove.setLayoutParams(removeParams);
+                btnRemove.setOnClickListener(v -> {
+                    String name = tvName.getText().toString();
+                    new AlertDialog.Builder(this)
+                            .setTitle("Remove Member")
+                            .setMessage("Remove " + name + " from this group?")
+                            .setPositiveButton("Remove", (d, w) -> removeMember(addr, btnRemove))
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                });
+                row.addView(btnRemove);
+            }
+
+            membersContainer.addView(row);
         }
     }
 
-    // ── Expense history ───────────────────────────────────────────────────────
+    // ── Per-member settle ─────────────────────────────────────────────────────
 
-    private void renderExpenses(List<ExpenseRecord> expenses) {
-        expensesContainer.removeAllViews();
-        if (expenses.isEmpty()) {
-            tvNoExpenses.setVisibility(View.VISIBLE);
-            return;
-        }
-        tvNoExpenses.setVisibility(View.GONE);
-        for (ExpenseRecord r : expenses) {
-            View item = getLayoutInflater().inflate(R.layout.item_expense, expensesContainer, false);
-            ((TextView) item.findViewById(R.id.tvExpenseItemDesc)).setText(r.description);
-            boolean iMine = creds != null && r.paidBy.equalsIgnoreCase(creds.getAddress());
-            ((TextView) item.findViewById(R.id.tvExpenseItemPaidBy))
-                    .setText(iMine ? "You paid" : "Paid by " + shortAddr(r.paidBy));
-            ((TextView) item.findViewById(R.id.tvExpenseItemAmount))
-                    .setText("₹" + (r.amountPaise / 100));
-            expensesContainer.addView(item);
-        }
-    }
-
-    private void saveExpenseLocally(ExpenseRecord record) {
-        SharedPreferences prefs = getSharedPreferences("expenses", MODE_PRIVATE);
-        String key  = "list_" + groupAddress;
-        String json = prefs.getString(key, "[]");
-        List<ExpenseRecord> list = new Gson().fromJson(json,
-                new TypeToken<List<ExpenseRecord>>() {}.getType());
-        if (list == null) list = new ArrayList<>();
-        list.add(0, record);
-        prefs.edit().putString(key, new Gson().toJson(list)).apply();
-    }
-
-    private List<ExpenseRecord> loadExpensesFromPrefs() {
-        SharedPreferences prefs = getSharedPreferences("expenses", MODE_PRIVATE);
-        String json = prefs.getString("list_" + groupAddress, "[]");
-        List<ExpenseRecord> list = new Gson().fromJson(json,
-                new TypeToken<List<ExpenseRecord>>() {}.getType());
-        return list != null ? list : new ArrayList<>();
-    }
-
-    // ── Add Expense dialog ────────────────────────────────────────────────────
-
-    private void showAddExpenseDialog() {
-        Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.dialog_add_expense);
-        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-
-        EditText       etDesc    = dialog.findViewById(R.id.etExpenseDesc);
-        EditText       etAmount  = dialog.findViewById(R.id.etExpenseAmount);
-        MaterialButton btnEqual  = dialog.findViewById(R.id.btnSplitEqual);
-        MaterialButton btnCustom = dialog.findViewById(R.id.btnSplitCustom);
-        LinearLayout   custCont  = dialog.findViewById(R.id.customSharesContainer);
-        TextView       tvStatus  = dialog.findViewById(R.id.tvExpenseStatus);
-        MaterialButton btnSubmit = dialog.findViewById(R.id.btnAddExpenseSubmit);
-
-        boolean[]       useCustom   = {false};
-        List<EditText>  shareInputs = new ArrayList<>();
-
-        // Build one row per member for custom % entry
-        for (String addr : currentMembers) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(6), 0, dp(6));
-
-            TextView lbl = new TextView(this);
-            lbl.setText(shortAddr(addr));
-            lbl.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-            lbl.setTextSize(14);
-            lbl.setLayoutParams(new LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            row.addView(lbl);
-
-            EditText et = new EditText(this);
-            et.setHint("%");
-            et.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-            et.setHintTextColor(ContextCompat.getColor(this, R.color.text_hint));
-            et.setInputType(InputType.TYPE_CLASS_NUMBER);
-            et.setTextSize(14);
-            et.setLayoutParams(new LinearLayout.LayoutParams(dp(56),
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-            row.addView(et);
-
-            TextView pctLbl = new TextView(this);
-            pctLbl.setText("%");
-            pctLbl.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
-            pctLbl.setTextSize(14);
-            pctLbl.setPadding(dp(4), 0, 0, 0);
-            row.addView(pctLbl);
-
-            custCont.addView(row);
-            shareInputs.add(et);
-        }
-
-        btnEqual.setOnClickListener(v -> {
-            useCustom[0] = false;
-            custCont.setVisibility(View.GONE);
-            setActiveBtn(btnEqual, btnCustom);
-        });
-        btnCustom.setOnClickListener(v -> {
-            useCustom[0] = true;
-            custCont.setVisibility(View.VISIBLE);
-            setActiveBtn(btnCustom, btnEqual);
-        });
-
-        btnSubmit.setOnClickListener(v -> {
-            String desc   = etDesc.getText().toString().trim();
-            String amtStr = etAmount.getText().toString().trim();
-            if (desc.isEmpty())   { etDesc.setError("Enter description"); return; }
-            if (amtStr.isEmpty()) { etAmount.setError("Enter amount"); return; }
-
-            long amtPaise;
-            try { amtPaise = (long)(Double.parseDouble(amtStr) * 100); }
-            catch (NumberFormatException e) { etAmount.setError("Invalid"); return; }
-
-            List<BigInteger> shares = new ArrayList<>();
-            if (useCustom[0]) {
-                int total = 0;
-                for (EditText et : shareInputs) {
-                    String s = et.getText().toString().trim();
-                    if (s.isEmpty()) { tvStatus.setText("Fill all percentages"); return; }
-                    int pct = Integer.parseInt(s);
-                    shares.add(BigInteger.valueOf(pct));
-                    total += pct;
-                }
-                if (total != 100) {
-                    tvStatus.setText("Percentages must sum to 100 (currently " + total + ")");
+    private void settleForMember(String memberAddr, MaterialButton btn) {
+        btn.setEnabled(false);
+        btn.setText("…");
+        new Thread(() -> {
+            try {
+                String myAddr = creds.getAddress().toLowerCase();
+                // Get balance: positive means I owe this member
+                long bal = cm.getBalance(groupAddress, myAddr, memberAddr);
+                if (bal <= 0) {
+                    runOnUiThread(() -> {
+                        btn.setEnabled(true);
+                        btn.setText("Settle");
+                        toast("No outstanding balance with this member");
+                    });
                     return;
                 }
-            } else {
-                shares = equalShares(currentMembers.size());
+                String hash = cm.markSettled(groupAddress, memberAddr, BigInteger.valueOf(bal));
+                cm.waitForReceipt(hash);
+                runOnUiThread(() -> {
+                    btn.setText("Done");
+                    toast("Settlement proposed — other party needs to confirm");
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    btn.setEnabled(true);
+                    btn.setText("Settle");
+                    toast("Error: " + e.getMessage());
+                });
             }
-
-            tvStatus.setText("Sending to blockchain…");
-            btnSubmit.setEnabled(false);
-            List<BigInteger> finalShares = shares;
-            long finalAmt = amtPaise;
-
-            new Thread(() -> {
-                try {
-                    cm.addExpense(groupAddress, desc, BigInteger.valueOf(finalAmt),
-                            currentMembers, finalShares);
-                    ExpenseRecord rec = new ExpenseRecord(desc, finalAmt,
-                            creds.getAddress(), System.currentTimeMillis() / 1000);
-                    saveExpenseLocally(rec);
-                    runOnUiThread(() -> {
-                        dialog.dismiss();
-                        toast("Expense recorded on-chain!");
-                        loadGroupData();
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        tvStatus.setText("Error: " + e.getMessage());
-                        btnSubmit.setEnabled(true);
-                    });
-                }
-            }).start();
-        });
-
-        dialog.show();
+        }).start();
     }
 
-    // ── Settle dialog ─────────────────────────────────────────────────────────
+    // ── Remove member ─────────────────────────────────────────────────────────
 
-    private void showSettleDialog() {
-        Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.dialog_settle);
-        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-
-        Spinner        spinner   = dialog.findViewById(R.id.spinnerSettleWith);
-        EditText       etAmount  = dialog.findViewById(R.id.etSettleAmount);
-        TextView       tvStatus  = dialog.findViewById(R.id.tvSettleStatus);
-        MaterialButton btnOk     = dialog.findViewById(R.id.btnConfirmSettle);
-
-        List<String> labels = new ArrayList<>();
-        for (int i = 0; i < debtorAddresses.size(); i++) {
-            labels.add(shortAddr(debtorAddresses.get(i))
-                    + "  —  ₹" + (debtAmountsPaise.get(i) / 100) + " owed");
-        }
-
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, labels) {
-            @Override
-            public View getView(int pos, View cv, ViewGroup p) {
-                TextView tv = (TextView) super.getView(pos, cv, p);
-                tv.setTextColor(ContextCompat.getColor(GroupDetailActivity.this, R.color.text_primary));
-                return tv;
+    private void removeMember(String addr, MaterialButton btn) {
+        btn.setEnabled(false);
+        new Thread(() -> {
+            try {
+                cm.removeMemberFromGroup(groupAddress, addr);
+                currentMembers.remove(addr);
+                runOnUiThread(() -> {
+                    toast("Member removed");
+                    loadGroupData();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    btn.setEnabled(true);
+                    toast("Error: " + e.getMessage());
+                });
             }
-            @Override
-            public View getDropDownView(int pos, View cv, ViewGroup p) {
-                TextView tv = (TextView) super.getDropDownView(pos, cv, p);
-                tv.setTextColor(ContextCompat.getColor(GroupDetailActivity.this, R.color.text_primary));
-                tv.setBackgroundColor(ContextCompat.getColor(GroupDetailActivity.this, R.color.bg_card));
-                return tv;
-            }
-        };
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
-
-        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-                etAmount.setText(String.valueOf(debtAmountsPaise.get(pos) / 100));
-            }
-            @Override public void onNothingSelected(AdapterView<?> p) {}
-        });
-        if (!debtAmountsPaise.isEmpty()) {
-            etAmount.setText(String.valueOf(debtAmountsPaise.get(0) / 100));
-        }
-
-        btnOk.setOnClickListener(v -> {
-            String amtStr = etAmount.getText().toString().trim();
-            if (amtStr.isEmpty()) { etAmount.setError("Enter amount"); return; }
-            int pos = spinner.getSelectedItemPosition();
-            String creditor = debtorAddresses.get(pos);
-            long amtPaise;
-            try { amtPaise = (long)(Double.parseDouble(amtStr) * 100); }
-            catch (NumberFormatException e) { etAmount.setError("Invalid"); return; }
-
-            tvStatus.setText("Submitting settlement…");
-            btnOk.setEnabled(false);
-            long finalPaise = amtPaise;
-
-            new Thread(() -> {
-                try {
-                    cm.markSettled(groupAddress, creditor, BigInteger.valueOf(finalPaise));
-                    runOnUiThread(() -> {
-                        dialog.dismiss();
-                        toast("Settlement proposed — the other party needs to confirm.");
-                        loadGroupData();
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        tvStatus.setText("Error: " + e.getMessage());
-                        btnOk.setEnabled(true);
-                    });
-                }
-            }).start();
-        });
-
-        dialog.show();
+        }).start();
     }
 
-    // ── Edit Group dialog ─────────────────────────────────────────────────────
+    // ── Leave group (remove self) ─────────────────────────────────────────────
 
-    private void showEditDialog() {
+    private void leaveGroup() {
+        if (creds == null) return;
+        new Thread(() -> {
+            try {
+                cm.removeMemberFromGroup(groupAddress, creds.getAddress());
+                runOnUiThread(() -> {
+                    toast("You left the group");
+                    finish();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Error: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    // ── Add member dialog ─────────────────────────────────────────────────────
+
+    private void showAddMemberDialog() {
         Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.dialog_edit_group);
-        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(24), dp(24), dp(24));
+        layout.setBackgroundColor(ContextCompat.getColor(this, R.color.bg_card));
 
-        EditText       etName     = dialog.findViewById(R.id.etEditGroupName);
-        EditText       etUsername = dialog.findViewById(R.id.etEditMemberUsername);
-        MaterialButton btnAdd     = dialog.findViewById(R.id.btnEditAddMember);
-        ChipGroup      chipGroup  = dialog.findViewById(R.id.chipEditMembers);
-        MaterialButton btnSave    = dialog.findViewById(R.id.btnSaveGroup);
-        TextView       tvStatus   = dialog.findViewById(R.id.tvEditStatus);
+        TextView title = new TextView(this);
+        title.setText("Add Member");
+        title.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        title.setTextSize(18);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(0, 0, 0, dp(16));
+        layout.addView(title);
 
-        etName.setText(currentGroupName);
-        for (String addr : currentMembers) {
-            addMemberChip(chipGroup, addr, shortAddr(addr), dialog, tvStatus);
-        }
+        EditText etCode = new EditText(this);
+        etCode.setHint("Friend code");
+        etCode.setHintTextColor(ContextCompat.getColor(this, R.color.text_hint));
+        etCode.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        etCode.setTextSize(15);
+        etCode.setBackgroundResource(R.drawable.bg_input);
+        etCode.setPadding(dp(16), dp(12), dp(16), dp(12));
+        LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        etParams.setMargins(0, 0, 0, dp(12));
+        etCode.setLayoutParams(etParams);
+        layout.addView(etCode);
+
+        TextView tvStatus = new TextView(this);
+        tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+        tvStatus.setTextSize(13);
+        tvStatus.setPadding(0, 0, 0, dp(12));
+        layout.addView(tvStatus);
+
+        MaterialButton btnAdd = new MaterialButton(this);
+        btnAdd.setText("Add to Group");
+        btnAdd.setAllCaps(false);
+        btnAdd.setTextColor(ContextCompat.getColor(this, R.color.bg_primary));
+        btnAdd.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(this, R.color.accent)));
+        layout.addView(btnAdd);
 
         btnAdd.setOnClickListener(v -> {
-            String uname = etUsername.getText().toString().trim();
-            if (uname.isEmpty()) return;
-            tvStatus.setText("Looking up " + uname + "…");
+            String code = etCode.getText().toString().trim();
+            if (code.isEmpty()) return;
+            tvStatus.setText("Looking up " + code + "…");
+            btnAdd.setEnabled(false);
             new Thread(() -> {
                 try {
-                    String addr = cm.getUsernameAddress(uname);
+                    String[] result = ProfileClient.lookupByCode(code);
+                    String addr  = result[0];
+                    String name  = result[1].isEmpty() ? code : result[1];
+                    ContactStore.addContact(this, code, name, addr);
+                    runOnUiThread(() -> tvStatus.setText("Adding " + name + " on-chain…"));
+                    cm.addMemberToGroup(groupAddress, addr);
+                    currentMembers.add(addr);
                     runOnUiThread(() -> {
-                        if (addr == null) {
-                            tvStatus.setText(uname + " not found");
-                        } else {
-                            tvStatus.setText("Adding on-chain…");
-                            new Thread(() -> {
-                                try {
-                                    cm.addMemberToGroup(groupAddress, addr);
-                                    runOnUiThread(() -> {
-                                        addMemberChip(chipGroup, addr, uname, dialog, tvStatus);
-                                        etUsername.setText("");
-                                        tvStatus.setText(uname + " added!");
-                                        currentMembers.add(addr);
-                                    });
-                                } catch (Exception e) {
-                                    runOnUiThread(() -> tvStatus.setText("Error: " + e.getMessage()));
-                                }
-                            }).start();
-                        }
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> tvStatus.setText("Error: " + e.getMessage()));
-                }
-            }).start();
-        });
-
-        btnSave.setOnClickListener(v -> {
-            String newName = etName.getText().toString().trim();
-            if (newName.isEmpty()) { etName.setError("Enter name"); return; }
-            if (newName.equals(currentGroupName)) { dialog.dismiss(); return; }
-            tvStatus.setText("Renaming…");
-            btnSave.setEnabled(false);
-            new Thread(() -> {
-                try {
-                    cm.renameGroup(groupAddress, newName);
-                    currentGroupName = newName;
-                    runOnUiThread(() -> {
-                        tvGroupName.setText(newName);
                         dialog.dismiss();
-                        toast("Group renamed!");
+                        toast(name + " added!");
+                        loadGroupData();
                     });
                 } catch (Exception e) {
                     runOnUiThread(() -> {
                         tvStatus.setText("Error: " + e.getMessage());
-                        btnSave.setEnabled(true);
+                        btnAdd.setEnabled(true);
                     });
                 }
             }).start();
         });
 
+        dialog.setContentView(layout);
+        dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
         dialog.show();
-    }
-
-    private void addMemberChip(ChipGroup cg, String address, String label,
-                               Dialog dialog, TextView tvStatus) {
-        Chip chip = new Chip(this);
-        chip.setText(label);
-        chip.setCloseIconVisible(true);
-        chip.setOnCloseIconClickListener(v -> {
-            tvStatus.setText("Removing " + label + "…");
-            new Thread(() -> {
-                try {
-                    cm.removeMemberFromGroup(groupAddress, address);
-                    currentMembers.remove(address);
-                    runOnUiThread(() -> {
-                        cg.removeView(chip);
-                        tvStatus.setText(label + " removed");
-                        tvMemberCount.setText(currentMembers.size() + " members");
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> tvStatus.setText("Error: " + e.getMessage()));
-                }
-            }).start();
-        });
-        cg.addView(chip);
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────────
-
-    private List<BigInteger> equalShares(int n) {
-        if (n == 0) return new ArrayList<>();
-        List<BigInteger> shares   = new ArrayList<>();
-        int              base      = 100 / n;
-        int              remainder = 100 - (base * n);
-        for (int i = 0; i < n; i++) {
-            shares.add(BigInteger.valueOf(i == 0 ? base + remainder : base));
-        }
-        return shares;
-    }
-
-    private void setActiveBtn(MaterialButton active, MaterialButton inactive) {
-        active.setBackgroundTintList(ColorStateList.valueOf(
-                ContextCompat.getColor(this, R.color.accent)));
-        active.setTextColor(ContextCompat.getColor(this, R.color.bg_primary));
-        inactive.setBackgroundTintList(ColorStateList.valueOf(
-                ContextCompat.getColor(this, R.color.accent_soft)));
-        inactive.setTextColor(ContextCompat.getColor(this, R.color.accent));
-    }
-
-    private String shortAddr(String addr) {
-        if (addr == null || addr.length() < 12) return addr;
-        return addr.substring(0, 8) + "…" + addr.substring(addr.length() - 4);
-    }
 
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);

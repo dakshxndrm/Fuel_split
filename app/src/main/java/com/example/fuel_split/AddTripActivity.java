@@ -1,6 +1,5 @@
 package com.example.fuel_split;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -8,26 +7,41 @@ import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
+import java.math.BigInteger;
 import java.util.*;
+import java.util.HashSet;
+import java.util.Set;
 
 
 public class AddTripActivity extends AppCompatActivity {
 
     private ViewFlipper viewFlipper;
-    private EditText etTripName, etNewPersonName, etDistance, etMileage, etFuelPrice;
+    private EditText etTripName, etTripNamePreload, etNewPersonName, etDistance, etMileage, etFuelPrice;
     private ChipGroup chipGroup;
-    private LinearLayout percentageContainer, splitModeContainer;
+    private LinearLayout percentageContainer, splitModeContainer, contactsListContainer;
     private Button btnNext, btnSplitEqual, btnSplitPercent, btnSplitKm;
+    private MaterialButton btnAddPerson;
     private Spinner spinnerPaidBy;
     private TextView tvStepLabel, tvStepTitle, tvSplitModeHint;
     private LinearProgressIndicator stepProgress;
 
+    public static final String EXTRA_PRELOAD_GROUP = "preload_group";
+
+    // member displayName → wallet address (null if not resolved)
+    private final LinkedHashMap<String, String> memberToAddress = new LinkedHashMap<>();
     private final List<String> members = new ArrayList<>();
+    // known people (contacts + group members): address → displayName
+    private final LinkedHashMap<String, String> allKnownPeople = new LinkedHashMap<>();
+    // addresses currently selected in the list
+    private final Set<String> selectedAddresses = new HashSet<>();
+
     private int step = 0;
-    private String splitMode = "equal"; // "equal", "percentage", "km"
+    private String splitMode = "equal";
+    private String preloadGroupAddress = null; // set when launched from a group
 
     private static final String[] STEP_TITLES = {
             "Who was there?",
@@ -47,57 +61,291 @@ public class AddTripActivity extends AppCompatActivity {
         etMileage           = findViewById(R.id.etMileage);
         etFuelPrice         = findViewById(R.id.etFuelPrice);
         chipGroup           = findViewById(R.id.dynamicChipGroup);
-        percentageContainer = findViewById(R.id.percentageContainer);
-        spinnerPaidBy       = findViewById(R.id.spinnerPaidBy);
+        percentageContainer   = findViewById(R.id.percentageContainer);
+        contactsListContainer = findViewById(R.id.contactsListContainer);
+        etTripNamePreload     = findViewById(R.id.etTripNamePreload);
+        spinnerPaidBy         = findViewById(R.id.spinnerPaidBy);
         btnNext             = findViewById(R.id.btnNext);
+        btnAddPerson        = findViewById(R.id.btnAddPerson);
         tvStepLabel         = findViewById(R.id.tvStepLabel);
         tvStepTitle         = findViewById(R.id.tvStepTitle);
         stepProgress        = findViewById(R.id.stepProgress);
 
-        updateHeader();
+        ContactStore.seedNameResolver(this);
 
-        findViewById(R.id.btnAddPerson).setOnClickListener(v -> addMember());
+        btnAddPerson.setOnClickListener(v -> addMember());
         btnNext.setOnClickListener(v -> handleNext());
+
+        // Load contacts + group members for the selectable list (only relevant in normal mode)
+        loadKnownPeople();
+
+        // Stage 6: if launched from a group, skip "Who was there?" and preload members
+        preloadGroupAddress = getIntent().getStringExtra(EXTRA_PRELOAD_GROUP);
+        if (preloadGroupAddress != null) {
+            step = 1;
+            viewFlipper.setDisplayedChild(1);
+            btnNext.setEnabled(false);
+            btnNext.setText("Loading members…");
+            tvStepTitle.setText("Loading group…");
+            // Show trip name field in step 2 (step 0 is skipped)
+            etTripNamePreload.setVisibility(View.VISIBLE);
+            findViewById(R.id.tvTripNamePreloadLabel).setVisibility(View.VISIBLE);
+            loadGroupMembersForPreload(preloadGroupAddress);
+        }
+
+        updateHeader();
     }
 
-    // ── Update header (step label, title, progress bar) ──────────────────
+    private void loadGroupMembersForPreload(String groupAddr) {
+        new Thread(() -> {
+            try {
+                WalletManager wm = new WalletManager(this);
+                org.web3j.crypto.Credentials creds = wm.getOrCreateWallet();
+                BlockchainManager bm = new BlockchainManager();
+                ContractManager cm = new ContractManager(bm.getWeb3(), creds);
+
+                List<String> addrs = cm.getGroupMembers(groupAddr);
+                for (String addr : addrs) {
+                    // Try live lookup; fall back to NameResolver cache or shortAddr
+                    String name;
+                    try {
+                        String[] info = ProfileClient.lookupByAddress(addr);
+                        if (info != null && info.length > 1 && !info[1].isEmpty()) {
+                            NameResolver.seed(addr, info[1]);
+                            name = info[1];
+                        } else {
+                            name = NameResolver.nameFor(addr);
+                        }
+                    } catch (Exception e) {
+                        name = NameResolver.nameFor(addr);
+                    }
+                    String finalName = name;
+                    String finalAddr = addr;
+                    runOnUiThread(() -> {
+                        if (!members.contains(finalName)) {
+                            members.add(finalName);
+                            memberToAddress.put(finalName, finalAddr);
+                        }
+                    });
+                }
+                runOnUiThread(() -> {
+                    btnNext.setEnabled(true);
+                    updateHeader();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    btnNext.setEnabled(true);
+                    updateHeader();
+                    Toast.makeText(this, "Could not load group: " + e.getMessage(),
+                            Toast.LENGTH_SHORT).show();
+                });
+            }
+        }).start();
+    }
+
+    // ── Known-people list (contacts + group members) ───────────────────────
+    private void loadKnownPeople() {
+        // 1. Load contacts from disk immediately (fast)
+        List<ContactStore.Contact> contacts = ContactStore.loadContacts(this);
+        for (ContactStore.Contact c : contacts) {
+            if (c.address == null || c.address.isEmpty()) continue;
+            String name = (c.displayName != null && !c.displayName.isEmpty())
+                    ? c.displayName : c.code;
+            allKnownPeople.put(c.address.toLowerCase(), name);
+        }
+        renderKnownPeopleList();
+
+        // 2. Pull group members from chain in background and merge
+        new Thread(() -> {
+            try {
+                WalletManager wm = new WalletManager(this);
+                org.web3j.crypto.Credentials creds2 = wm.getOrCreateWallet();
+                BlockchainManager bm = new BlockchainManager();
+                ContractManager cm2 = new ContractManager(bm.getWeb3(), creds2);
+                String myAddr = creds2.getAddress().toLowerCase();
+
+                List<String> groups = cm2.getUserGroups();
+                boolean changed = false;
+                for (String grpAddr : groups) {
+                    for (String addr : cm2.getGroupMembers(grpAddr)) {
+                        String lowerAddr = addr.toLowerCase();
+                        if (lowerAddr.equals(myAddr)) continue;
+                        if (!allKnownPeople.containsKey(lowerAddr)) {
+                            allKnownPeople.put(lowerAddr, NameResolver.nameFor(addr));
+                            changed = true;
+                        }
+                    }
+                }
+                if (changed) runOnUiThread(this::renderKnownPeopleList);
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    private void renderKnownPeopleList() {
+        if (contactsListContainer == null) return;
+        contactsListContainer.removeAllViews();
+
+        if (allKnownPeople.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("No saved contacts yet");
+            empty.setTextColor(0xFF7B8AA0);
+            empty.setTextSize(13);
+            empty.setPadding(0, 4, 0, 4);
+            contactsListContainer.addView(empty);
+            return;
+        }
+
+        for (Map.Entry<String, String> entry : allKnownPeople.entrySet()) {
+            String addr = entry.getKey();
+            String name = entry.getValue();
+            boolean selected = selectedAddresses.contains(addr);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(16), dp(14), dp(16), dp(14));
+            row.setBackgroundResource(selected ? R.drawable.bg_segment_selected : R.drawable.bg_input);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, 0, 0, dp(6));
+            row.setLayoutParams(params);
+
+            TextView tvName = new TextView(this);
+            tvName.setText(name);
+            tvName.setTextColor(selected ? 0xFF0A0E1A : 0xFFF0F0FF);
+            tvName.setTextSize(15);
+            tvName.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(tvName);
+
+            TextView tvMark = new TextView(this);
+            tvMark.setText(selected ? "✓" : "+");
+            tvMark.setTextColor(selected ? 0xFF0A0E1A : 0xFF7B8AA0);
+            tvMark.setTextSize(18);
+            row.addView(tvMark);
+
+            row.setOnClickListener(v -> {
+                if (selectedAddresses.contains(addr)) {
+                    // Deselect
+                    selectedAddresses.remove(addr);
+                    members.remove(name);
+                    memberToAddress.remove(name);
+                    // Remove matching chip
+                    for (int i = chipGroup.getChildCount() - 1; i >= 0; i--) {
+                        View child = chipGroup.getChildAt(i);
+                        if (addr.equals(child.getTag())) {
+                            chipGroup.removeView(child);
+                            break;
+                        }
+                    }
+                } else {
+                    // Select
+                    selectedAddresses.add(addr);
+                    if (!members.contains(name)) {
+                        members.add(name);
+                        memberToAddress.put(name, addr);
+                    }
+                    Chip chip = new Chip(this);
+                    chip.setText(name + " ✓");
+                    chip.setTag(addr);
+                    chip.setCloseIconVisible(true);
+                    chip.setOnCloseIconClickListener(cv -> {
+                        selectedAddresses.remove(addr);
+                        members.remove(name);
+                        memberToAddress.remove(name);
+                        chipGroup.removeView(chip);
+                        renderKnownPeopleList();
+                    });
+                    chipGroup.addView(chip);
+                }
+                renderKnownPeopleList();
+            });
+
+            contactsListContainer.addView(row);
+        }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    // ── Update header ──────────────────────────────────────────────────────
     private void updateHeader() {
-        tvStepLabel.setText("Step " + (step + 1) + " of 3");
+        if (preloadGroupAddress != null) {
+            // 2-step flow: Trip Details (step=1) → Split the Cost (step=2)
+            int displayStep = step - 1 + 1; // step 1→1, step 2→2
+            tvStepLabel.setText("Step " + displayStep + " of 2");
+            stepProgress.setProgress(displayStep * 50, true);
+        } else {
+            tvStepLabel.setText("Step " + (step + 1) + " of 3");
+            stepProgress.setProgress((step + 1) * 33, true);
+        }
         tvStepTitle.setText(STEP_TITLES[step]);
-        stepProgress.setProgress((step + 1) * 33, true);
         btnNext.setText(step == 2 ? "Submit Trip  ✓" : "Next  →");
     }
 
-    // ── Add a member chip ─────────────────────────────────────────────────
+    // ── Add a member via friend code (async lookup) ────────────────────────
     private void addMember() {
-        String name = etNewPersonName.getText().toString().trim();
-
-        if (name.isEmpty()) {
-            Toast.makeText(this, "Enter a name first", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (members.contains(name)) {
-            Toast.makeText(this, name + " is already added", Toast.LENGTH_SHORT).show();
+        String input = etNewPersonName.getText().toString().trim();
+        if (input.isEmpty()) {
+            Toast.makeText(this, "Enter a friend code or name", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        members.add(name);
+        btnAddPerson.setEnabled(false);
+        btnAddPerson.setText("…");
 
-        Chip chip = new Chip(this);
-        chip.setText(name);
-        chip.setCloseIconVisible(true);
+        new Thread(() -> {
+            String displayName = input;
+            String address     = null;
+            try {
+                String[] result = ProfileClient.lookupByCode(input);
+                address     = result[0];
+                displayName = result[1].isEmpty() ? input : result[1];
+                ContactStore.addContact(AddTripActivity.this, input, displayName, address);
+            } catch (Exception ignored) {
+                // no profile found — store as plain name, no address
+            }
 
-        final String memberName = name;
-        chip.setOnCloseIconClickListener(v -> {
-            members.remove(memberName);
-            chipGroup.removeView(chip);
-        });
+            String finalName    = displayName;
+            String finalAddress = address;
 
-        chipGroup.addView(chip);
-        etNewPersonName.setText("");
+            runOnUiThread(() -> {
+                btnAddPerson.setEnabled(true);
+                btnAddPerson.setText("Add");
+
+                if (members.contains(finalName)) {
+                    Toast.makeText(this, finalName + " already added", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                members.add(finalName);
+                memberToAddress.put(finalName, finalAddress);
+                if (finalAddress != null) {
+                    // Also add to allKnownPeople so row shows ✓
+                    allKnownPeople.put(finalAddress.toLowerCase(), finalName);
+                    selectedAddresses.add(finalAddress.toLowerCase());
+                }
+
+                Chip chip = new Chip(this);
+                chip.setText(finalName + (finalAddress != null ? " ✓" : ""));
+                chip.setTag(finalAddress != null ? finalAddress.toLowerCase() : null);
+                chip.setCloseIconVisible(true);
+                chip.setOnCloseIconClickListener(v -> {
+                    members.remove(finalName);
+                    memberToAddress.remove(finalName);
+                    chipGroup.removeView(chip);
+                    if (finalAddress != null) selectedAddresses.remove(finalAddress.toLowerCase());
+                    renderKnownPeopleList();
+                });
+                chipGroup.addView(chip);
+                etNewPersonName.setText("");
+                renderKnownPeopleList(); // update row checkmarks
+            });
+        }).start();
     }
 
-    // ── Handle Next / Submit button ───────────────────────────────────────
+    // ── Next / Submit ─────────────────────────────────────────────────────
     private void handleNext() {
         if (step == 0) {
             if (etTripName.getText().toString().trim().isEmpty()) {
@@ -136,17 +384,15 @@ public class AddTripActivity extends AppCompatActivity {
         }
     }
 
-    // ── Build Step 3: split mode selection + dynamic inputs ───────────────
+    // ── Step 3 UI (unchanged) ─────────────────────────────────────────────
     private void buildStep3() {
         percentageContainer.removeAllViews();
 
-        // Who paid spinner
         ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item, members);
         spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerPaidBy.setAdapter(spinnerAdapter);
 
-        // Total cost preview
         double distance  = Double.parseDouble(etDistance.getText().toString());
         double mileage   = Double.parseDouble(etMileage.getText().toString());
         double fuelPrice = Double.parseDouble(etFuelPrice.getText().toString());
@@ -159,7 +405,6 @@ public class AddTripActivity extends AppCompatActivity {
         tvTotal.setPadding(0, 0, 0, 8);
         percentageContainer.addView(tvTotal);
 
-        // Split mode selection section
         TextView tvSplitLabel = new TextView(this);
         tvSplitLabel.setText("How do you want to split?");
         tvSplitLabel.setTextColor(0xFF7B8AA0);
@@ -174,63 +419,50 @@ public class AddTripActivity extends AppCompatActivity {
         modeParams.setMargins(0, 0, 0, 20);
         splitModeContainer.setLayoutParams(modeParams);
 
-        // Create three mode buttons
-        btnSplitEqual = createModeButton("Equal", "equal");
-        btnSplitPercent = createModeButton("By %", "percentage");
-        btnSplitKm = createModeButton("By KM", "km");
+        btnSplitEqual   = createModeButton("Equal",   "equal");
+        btnSplitPercent = createModeButton("By %",    "percentage");
+        btnSplitKm      = createModeButton("By KM",   "km");
 
         splitModeContainer.addView(btnSplitEqual);
         splitModeContainer.addView(btnSplitPercent);
         splitModeContainer.addView(btnSplitKm);
         percentageContainer.addView(splitModeContainer);
 
-        // Hint text
         tvSplitModeHint = new TextView(this);
         tvSplitModeHint.setTextColor(0xFF7B8AA0);
         tvSplitModeHint.setTextSize(13);
         tvSplitModeHint.setPadding(0, 0, 0, 16);
         percentageContainer.addView(tvSplitModeHint);
 
-        // Build initial split UI (default: equal)
         updateSplitMode("equal");
     }
 
-    // ── Create mode selection button ──────────────────────────────────────
     private Button createModeButton(String label, String mode) {
         Button btn = new Button(this);
         btn.setText(label);
         btn.setTextSize(14);
         btn.setAllCaps(false);
-
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                0, 52, 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, 52, 1f);
         params.setMargins(0, 0, 8, 0);
         btn.setLayoutParams(params);
         btn.setStateListAnimator(null);
-
         btn.setOnClickListener(v -> updateSplitMode(mode));
         return btn;
     }
 
-    // ── Update split mode and rebuild UI ──────────────────────────────────
     private void updateSplitMode(String mode) {
         splitMode = mode;
-
-        // Update button states
-        updateButtonState(btnSplitEqual, mode.equals("equal"));
+        updateButtonState(btnSplitEqual,   mode.equals("equal"));
         updateButtonState(btnSplitPercent, mode.equals("percentage"));
-        updateButtonState(btnSplitKm, mode.equals("km"));
+        updateButtonState(btnSplitKm,      mode.equals("km"));
 
-        // Remove old input rows
         int childCount = percentageContainer.getChildCount();
         for (int i = childCount - 1; i >= 0; i--) {
             View child = percentageContainer.getChildAt(i);
-            if (child.getTag() != null && child.getTag().equals("inputRow")) {
+            if (child.getTag() != null && child.getTag().equals("inputRow"))
                 percentageContainer.removeView(child);
-            }
         }
 
-        // Update hint and build new inputs
         if (mode.equals("equal")) {
             tvSplitModeHint.setText("Cost will be divided equally among all members");
             buildEqualSplitUI();
@@ -243,7 +475,6 @@ public class AddTripActivity extends AppCompatActivity {
         }
     }
 
-    // ── Update button visual state ────────────────────────────────────────
     private void updateButtonState(Button btn, boolean selected) {
         if (selected) {
             btn.setBackgroundResource(R.drawable.bg_segment_selected);
@@ -256,11 +487,9 @@ public class AddTripActivity extends AppCompatActivity {
         }
     }
 
-    // ── Build equal split UI (just shows the split) ───────────────────────
     private void buildEqualSplitUI() {
-        double totalCost = calculateTotalCost();
+        double totalCost  = calculateTotalCost();
         double equalShare = totalCost / members.size();
-
         for (String name : members) {
             TextView tv = new TextView(this);
             tv.setText(name + "  •  ₹" + String.format("%.2f", equalShare));
@@ -268,41 +497,29 @@ public class AddTripActivity extends AppCompatActivity {
             tv.setTextSize(15);
             tv.setPadding(16, 12, 16, 12);
             tv.setBackgroundResource(R.drawable.bg_input);
-            
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             params.setMargins(0, 0, 0, 8);
             tv.setLayoutParams(params);
             tv.setTag("inputRow");
-            
             percentageContainer.addView(tv);
         }
     }
 
-    // ── Build percentage split UI ─────────────────────────────────────────
     private void buildPercentageSplitUI() {
-        for (String name : members) {
-            LinearLayout row = createInputRow(name, "%", "0");
-            percentageContainer.addView(row);
-        }
+        for (String name : members) percentageContainer.addView(createInputRow(name, "%", "0"));
     }
 
-    // ── Build km-based split UI ───────────────────────────────────────────
     private void buildKmSplitUI() {
-        for (String name : members) {
-            LinearLayout row = createInputRow(name, "km", "0");
-            percentageContainer.addView(row);
-        }
+        for (String name : members) percentageContainer.addView(createInputRow(name, "km", "0"));
     }
 
-    // ── Create a reusable input row ───────────────────────────────────────
     private LinearLayout createInputRow(String name, String unit, String hint) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackgroundResource(R.drawable.bg_input);
         row.setPadding(20, 12, 20, 12);
-
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         rowParams.setMargins(0, 0, 0, 8);
@@ -313,9 +530,7 @@ public class AddTripActivity extends AppCompatActivity {
         tv.setText(name);
         tv.setTextColor(0xFFF0F0FF);
         tv.setTextSize(15);
-        LinearLayout.LayoutParams tvParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        tv.setLayoutParams(tvParams);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         EditText et = new EditText(this);
         et.setHint(hint);
@@ -326,7 +541,7 @@ public class AddTripActivity extends AppCompatActivity {
         et.setGravity(Gravity.CENTER);
         et.setBackgroundResource(R.drawable.bg_input);
         et.setPadding(12, 8, 12, 8);
-        LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(100, 
+        LinearLayout.LayoutParams etParams = new LinearLayout.LayoutParams(100,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         etParams.setMargins(8, 0, 8, 0);
         et.setLayoutParams(etParams);
@@ -339,11 +554,9 @@ public class AddTripActivity extends AppCompatActivity {
         row.addView(tv);
         row.addView(et);
         row.addView(unitTv);
-        
         return row;
     }
 
-    // ── Calculate total cost ──────────────────────────────────────────────
     private double calculateTotalCost() {
         double distance  = Double.parseDouble(etDistance.getText().toString());
         double mileage   = Double.parseDouble(etMileage.getText().toString());
@@ -351,7 +564,7 @@ public class AddTripActivity extends AppCompatActivity {
         return (distance / mileage) * fuelPrice;
     }
 
-    // ── Submit trip and return to MainActivity ────────────────────────────
+    // ── Submit: compute shares, then save to TripStore (+ chain if possible) ──
     private void submitTrip() {
         double totalCost = calculateTotalCost();
         double distance  = Double.parseDouble(etDistance.getText().toString());
@@ -361,114 +574,164 @@ public class AddTripActivity extends AppCompatActivity {
         HashMap<String, Double> shares = new HashMap<>();
 
         if (splitMode.equals("equal")) {
-            // Equal split - simple division
             double equalShare = totalCost / members.size();
-            for (String name : members) {
-                shares.put(name, equalShare);
-            }
+            for (String name : members) shares.put(name, equalShare);
 
         } else if (splitMode.equals("percentage")) {
-            // Percentage split - validate and calculate
             double totalPercent = 0;
-
             for (int i = 0; i < members.size(); i++) {
                 View row = findInputRowByIndex(i);
                 if (row instanceof LinearLayout) {
                     EditText et = (EditText) ((LinearLayout) row).getChildAt(1);
                     String percentStr = et.getText().toString().trim();
-
                     if (percentStr.isEmpty()) {
-                        Toast.makeText(this, members.get(i) + "'s % is empty", 
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, members.get(i) + "'s % is empty", Toast.LENGTH_SHORT).show();
                         return;
                     }
-
                     double percent = Double.parseDouble(percentStr);
                     if (percent < 0 || percent > 100) {
-                        Toast.makeText(this, members.get(i) + "'s % must be between 0 and 100",
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, members.get(i) + "'s % must be 0–100", Toast.LENGTH_SHORT).show();
                         return;
                     }
-
                     totalPercent += percent;
                     shares.put(members.get(i), (percent / 100.0) * totalCost);
                 }
             }
-
             if (Math.abs(totalPercent - 100) > 0.01) {
                 Toast.makeText(this,
-                        "Percentages must total 100%  (currently " + 
+                        "Percentages must total 100%  (currently " +
                         String.format("%.1f", totalPercent) + "%)",
                         Toast.LENGTH_LONG).show();
                 return;
             }
 
         } else {
-            // KM-based split
             double totalKm = 0;
             HashMap<String, Double> kmMap = new HashMap<>();
-
             for (int i = 0; i < members.size(); i++) {
                 View row = findInputRowByIndex(i);
                 if (row instanceof LinearLayout) {
                     EditText et = (EditText) ((LinearLayout) row).getChildAt(1);
                     String kmStr = et.getText().toString().trim();
-
                     if (kmStr.isEmpty()) {
-                        Toast.makeText(this, members.get(i) + "'s km is empty", 
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, members.get(i) + "'s km is empty", Toast.LENGTH_SHORT).show();
                         return;
                     }
-
                     double km = Double.parseDouble(kmStr);
                     if (km < 0) {
-                        Toast.makeText(this, members.get(i) + "'s km cannot be negative",
-                                Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, members.get(i) + "'s km cannot be negative", Toast.LENGTH_SHORT).show();
                         return;
                     }
-
                     totalKm += km;
                     kmMap.put(members.get(i), km);
                 }
             }
-
-            if (totalKm == 0) {
-                Toast.makeText(this, "Total km cannot be 0", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            // Calculate shares based on km proportion
-            for (String name : members) {
-                double km = kmMap.get(name);
-                shares.put(name, (km / totalKm) * totalCost);
-            }
+            if (totalKm == 0) { Toast.makeText(this, "Total km cannot be 0", Toast.LENGTH_SHORT).show(); return; }
+            for (String name : members) shares.put(name, (kmMap.get(name) / totalKm) * totalCost);
         }
 
-        String paidBy = spinnerPaidBy.getSelectedItem().toString();
+        // In preload mode the trip name comes from the step-2 field
+        String tripName = (preloadGroupAddress != null)
+                ? etTripNamePreload.getText().toString().trim()
+                : etTripName.getText().toString().trim();
+        if (tripName.isEmpty()) {
+            Toast.makeText(this, "Please enter a trip name", Toast.LENGTH_SHORT).show();
+            btnNext.setEnabled(true);
+            btnNext.setText("Submit Trip  ✓");
+            return;
+        }
+        String paidBy   = spinnerPaidBy.getSelectedItem().toString();
+        String distStr  = String.format("%.1f", distance);
+        String fuelStr  = String.format("%.2f", fuelUsed);
+        String costStr  = String.format("%.2f", totalCost);
 
-        Intent intent = new Intent();
-        intent.putExtra("TRIP_NAME",  etTripName.getText().toString().trim());
-        intent.putExtra("DISTANCE",   String.format("%.1f", distance));
-        intent.putExtra("FUEL_USED",  String.format("%.2f", fuelUsed));
-        intent.putExtra("TOTAL_COST", String.format("%.2f", totalCost));
-        intent.putExtra("MEMBERS",    members.toString());
-        intent.putExtra("SHARES_MAP", shares);
-        intent.putExtra("PAID_BY",    paidBy);
-        intent.putExtra("SPLIT_MODE", splitMode);
+        // disable button while saving
+        btnNext.setEnabled(false);
+        btnNext.setText("Saving…");
 
-        setResult(RESULT_OK, intent);
-        finish();
+        HashMap<String, Double> finalShares = shares;
+
+        new Thread(() -> {
+            // If launched from a group, use that address; otherwise create a new one
+            String groupAddress = preloadGroupAddress;
+
+            try {
+                WalletManager   wm    = new WalletManager(this);
+                org.web3j.crypto.Credentials creds = wm.getOrCreateWallet();
+                BlockchainManager bm  = new BlockchainManager();
+                ContractManager   cm  = new ContractManager(bm.getWeb3(), creds);
+
+                if (preloadGroupAddress == null) {
+                    // Normal flow: collect resolved members and create group
+                    List<String> resolvedAddrs = new ArrayList<>();
+                    for (String name : members) {
+                        String addr = memberToAddress.get(name);
+                        if (addr != null) resolvedAddrs.add(addr);
+                    }
+                    if (resolvedAddrs.size() >= 2) {
+                        String createHash = cm.createGroup(tripName, resolvedAddrs);
+                        cm.waitForReceipt(createHash);
+                        List<String> groups = cm.getUserGroups();
+                        if (!groups.isEmpty()) groupAddress = groups.get(groups.size() - 1);
+                    }
+                }
+
+                if (groupAddress != null) {
+                    String desc = "name=" + tripName
+                            + ";km=" + distStr
+                            + ";mileage=" + String.format("%.1f", mileage)
+                            + ";fuel=" + String.format("%.2f", totalCost);
+
+                    long amtPaise = Math.round(totalCost * 100);
+
+                    // Use the group's actual member list for the on-chain expense
+                    List<String>     groupMembers   = cm.getGroupMembers(groupAddress);
+                    List<BigInteger> equalPctShares = equalShares(groupMembers.size());
+                    cm.waitForReceipt(cm.addExpense(groupAddress, desc,
+                            BigInteger.valueOf(amtPaise), groupMembers, equalPctShares));
+                }
+            } catch (Exception e) {
+                android.util.Log.e("FUELSPLIT", "Chain error during trip submit", e);
+                // non-fatal: still save locally
+            }
+
+            // Build and persist the trip locally
+            Trip trip = new Trip(tripName,
+                    distStr + " km",
+                    fuelStr + " L",
+                    costStr,
+                    members.toString(),
+                    finalShares,
+                    paidBy);
+            trip.setGroupAddress(groupAddress);
+            TripStore.addTrip(this, trip);
+
+            final boolean onChain = (groupAddress != null);
+            runOnUiThread(() -> {
+                Toast.makeText(this,
+                        onChain ? "Trip saved on-chain!" : "Trip saved locally",
+                        Toast.LENGTH_SHORT).show();
+                finish();
+            });
+        }).start();
     }
 
-    // ── Helper to find input row by index ─────────────────────────────────
+    private List<BigInteger> equalShares(int n) {
+        if (n == 0) return new ArrayList<>();
+        List<BigInteger> result    = new ArrayList<>();
+        int              base      = 100 / n;
+        int              remainder = 100 - (base * n);
+        for (int i = 0; i < n; i++)
+            result.add(BigInteger.valueOf(i == 0 ? base + remainder : base));
+        return result;
+    }
+
     private View findInputRowByIndex(int index) {
         int rowCount = 0;
         for (int i = 0; i < percentageContainer.getChildCount(); i++) {
             View child = percentageContainer.getChildAt(i);
             if (child.getTag() != null && child.getTag().equals("inputRow")) {
-                if (rowCount == index) {
-                    return child;
-                }
+                if (rowCount == index) return child;
                 rowCount++;
             }
         }

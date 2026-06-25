@@ -10,16 +10,19 @@ import java.util.List;
 
 public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder> {
 
-    private final List<Trip> tripList;
-    private final OnTripLongClickListener longClickListener;
+    public interface OnItemLongClickListener { void onLongClick(int position); }
+    public interface OnItemClickListener    { void onClick(int position); }
 
-    public interface OnTripLongClickListener {
-        void onTripLongClick(int position);
-    }
+    private final List<Trip>               tripList;
+    private final OnItemLongClickListener  longClickListener;
+    private final OnItemClickListener      clickListener;
 
-    public TripAdapter(List<Trip> tripList, OnTripLongClickListener listener) {
+    public TripAdapter(List<Trip> tripList,
+                       OnItemLongClickListener longClickListener,
+                       OnItemClickListener clickListener) {
         this.tripList          = tripList;
-        this.longClickListener = listener;
+        this.longClickListener = longClickListener;
+        this.clickListener     = clickListener;
     }
 
     @NonNull
@@ -40,7 +43,14 @@ public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder
         holder.total.setText("₹" + trip.getTotal());
         holder.paidBy.setText("Paid by: " + trip.getPaidBy());
 
-        // Build member initials string e.g. "R A V"
+        // Settled / Pending badge
+        boolean settled = trip.isSettled();
+        holder.badge.setText(settled ? "Settled" : "Pending");
+        holder.badge.setTextColor(settled ? 0xFF00C9A7 : 0xFFFFB347);
+        holder.badge.setBackgroundResource(settled
+                ? R.drawable.bg_paidby_pill : R.drawable.bg_paidby_pill);
+
+        // Member initials
         String raw = trip.getMembers().replace("[", "").replace("]", "");
         String[] names = raw.split(",");
         StringBuilder initials = new StringBuilder();
@@ -53,9 +63,11 @@ public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder
         }
         holder.memberInitials.setText(initials.toString().trim());
 
+        holder.itemView.setOnClickListener(v -> {
+            if (clickListener != null) clickListener.onClick(position);
+        });
         holder.itemView.setOnLongClickListener(v -> {
-            if (longClickListener != null)
-                longClickListener.onTripLongClick(position);
+            if (longClickListener != null) longClickListener.onLongClick(position);
             return true;
         });
     }
@@ -64,7 +76,7 @@ public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder
     public int getItemCount() { return tripList.size(); }
 
     public static class TripViewHolder extends RecyclerView.ViewHolder {
-        TextView tripName, distance, fuel, total, paidBy, memberInitials;
+        TextView tripName, distance, fuel, total, paidBy, memberInitials, badge;
 
         public TripViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -74,6 +86,7 @@ public class TripAdapter extends RecyclerView.Adapter<TripAdapter.TripViewHolder
             total          = itemView.findViewById(R.id.itemTotal);
             paidBy         = itemView.findViewById(R.id.tvPaidBy);
             memberInitials = itemView.findViewById(R.id.tvMemberInitials);
+            badge          = itemView.findViewById(R.id.tvSettledBadge);
         }
     }
 }

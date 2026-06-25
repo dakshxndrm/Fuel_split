@@ -22,6 +22,9 @@
             android:name=".GroupDetailActivity"
             android:exported="false" />
         <activity
+            android:name=".TripDetailActivity"
+            android:exported="false" />
+        <activity
             android:name=".AddTripActivity"
             android:exported="false" />
         <activity
