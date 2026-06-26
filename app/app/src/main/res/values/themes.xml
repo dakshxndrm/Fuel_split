@@ -1,18 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+
     <style name="Base.Theme.Fuel_split" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- ── Primary (teal) ── -->
         <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">@color/bg_primary</item>
+        <item name="colorOnPrimary">@color/text_on_accent</item>
+        <item name="colorPrimaryContainer">@color/accent_soft</item>
+        <item name="colorOnPrimaryContainer">@color/accent</item>
+
+        <!-- ── Secondary (gold) ── -->
+        <item name="colorSecondary">@color/color_secondary</item>
+        <item name="colorOnSecondary">@color/color_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/color_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/color_secondary</item>
+
+        <!-- ── Tertiary (blue) ── -->
+        <item name="colorTertiary">@color/color_tertiary</item>
+        <item name="colorOnTertiary">@color/color_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/color_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/color_tertiary</item>
+
+        <!-- ── Error ── -->
+        <item name="colorError">@color/color_error</item>
+        <item name="colorOnError">@color/color_on_error</item>
+        <item name="colorErrorContainer">@color/color_error_container</item>
+        <item name="colorOnErrorContainer">@color/color_on_error_container</item>
+
+        <!-- ── Backgrounds / surfaces ── -->
+        <item name="android:colorBackground">@color/bg_primary</item>
         <item name="colorSurface">@color/bg_surface</item>
         <item name="colorOnSurface">@color/text_primary</item>
-        <item name="android:colorBackground">@color/bg_primary</item>
+        <item name="colorSurfaceVariant">@color/color_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/color_on_surface_variant</item>
+        <item name="colorSurfaceContainer">@color/bg_card</item>
+        <item name="colorSurfaceContainerHigh">@color/bg_card_elevated</item>
+
+        <!-- ── Outline ── -->
+        <item name="colorOutline">@color/color_outline</item>
+        <item name="colorOutlineVariant">@color/color_outline_variant</item>
+
+        <!-- ── Controls ── -->
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="colorControlHighlight">@color/accent_soft</item>
+
+        <!-- ── System bars ── -->
         <item name="android:statusBarColor">@color/bg_primary</item>
         <item name="android:navigationBarColor">@color/nav_bg</item>
         <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
-        <item name="colorControlActivated">@color/accent</item>
-        <item name="colorControlHighlight">@color/accent_soft</item>
+
+        <!-- ── Shape (M3 corner system) ── -->
+        <item name="shapeCornerFamily">rounded</item>
     </style>
 
     <style name="Theme.Fuel_split" parent="Base.Theme.Fuel_split"/>
+
 </resources>

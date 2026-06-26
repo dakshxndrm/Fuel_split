@@ -6,25 +6,23 @@
     android:background="@color/bg_primary"
     android:orientation="vertical">
 
-    <!-- Header -->
+    <!-- Header row: Back + title + status badge -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="8dp"
         android:paddingTop="24dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="12dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnBack"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
+            style="@style/Widget.App.Button.Text"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:text="← Back"
-            android:textColor="@color/accent"
-            android:textSize="14sp"
-            android:textAllCaps="false"/>
+            android:textSize="14sp"/>
 
         <TextView
             android:id="@+id/tvDetailTitle"
@@ -48,7 +46,8 @@
             android:textStyle="bold"
             android:background="@drawable/bg_paidby_pill"
             android:paddingHorizontal="12dp"
-            android:paddingVertical="5dp"/>
+            android:paddingVertical="6dp"
+            android:layout_marginEnd="8dp"/>
     </LinearLayout>
 
     <View
@@ -67,14 +66,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
-            <!-- Stats row -->
+            <!-- Stat boxes row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:layout_marginBottom="16dp">
+                android:layout_marginBottom="20dp">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -126,7 +125,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="distance"
+                        android:text="km"
                         android:textColor="@color/text_secondary"
                         android:textSize="11sp"
                         android:layout_marginTop="3dp"/>
@@ -153,7 +152,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="fuel"
+                        android:text="litres"
                         android:textColor="@color/text_secondary"
                         android:textSize="11sp"
                         android:layout_marginTop="3dp"/>
@@ -168,7 +167,8 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="11sp"
                 android:letterSpacing="0.08"
-                android:layout_marginBottom="6dp"/>
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp"/>
 
             <TextView
                 android:id="@+id/tvDetailPaidBy"
@@ -179,10 +179,10 @@
                 android:textSize="16sp"
                 android:background="@drawable/bg_input"
                 android:paddingHorizontal="16dp"
-                android:paddingVertical="12dp"
+                android:paddingVertical="14dp"
                 android:layout_marginBottom="20dp"/>
 
-            <!-- Shares -->
+            <!-- Cost split -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -190,6 +190,7 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="11sp"
                 android:letterSpacing="0.08"
+                android:textAllCaps="true"
                 android:layout_marginBottom="8dp"/>
 
             <LinearLayout
@@ -199,7 +200,7 @@
                 android:orientation="vertical"
                 android:layout_marginBottom="24dp"/>
 
-            <!-- Group address (if on-chain) -->
+            <!-- On-chain group (hidden by default) -->
             <TextView
                 android:id="@+id/tvGroupAddressLabel"
                 android:layout_width="wrap_content"
@@ -208,6 +209,7 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="11sp"
                 android:letterSpacing="0.08"
+                android:textAllCaps="true"
                 android:layout_marginBottom="6dp"
                 android:visibility="gone"/>
 
@@ -224,7 +226,7 @@
                 android:layout_marginBottom="20dp"
                 android:visibility="gone"/>
 
-            <!-- Status text shown during settle operation -->
+            <!-- Settle status -->
             <TextView
                 android:id="@+id/tvSettleStatus"
                 android:layout_width="match_parent"
@@ -244,7 +246,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:background="@color/bg_primary"
-        android:paddingHorizontal="20dp"
+        android:paddingHorizontal="16dp"
         android:paddingTop="12dp"
         android:paddingBottom="24dp">
 
@@ -256,15 +258,9 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSettle"
+            style="@style/Widget.App.Button.Primary"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="Settle This Trip"
-            android:textColor="@color/bg_primary"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            app:backgroundTint="@color/accent"
-            app:cornerRadius="16dp"
-            android:textAllCaps="false"/>
+            android:layout_height="52dp"
+            android:text="Settle This Trip"/>
     </LinearLayout>
-
 </LinearLayout>

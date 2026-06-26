@@ -15,14 +15,15 @@
         android:orientation="vertical"
         android:paddingHorizontal="20dp"
         android:paddingTop="24dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="14dp"
+        android:background="@color/bg_primary">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="FuelSplit ⛽"
             android:textColor="@color/text_primary"
-            android:textSize="28sp"
+            android:textSize="26sp"
             android:textStyle="bold"
             android:letterSpacing="-0.01"/>
 
@@ -33,7 +34,7 @@
             android:text="No trips logged yet"
             android:textColor="@color/text_secondary"
             android:textSize="13sp"
-            android:layout_marginTop="4dp"/>
+            android:layout_marginTop="3dp"/>
     </LinearLayout>
 
     <View
@@ -83,7 +84,7 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:padding="32dp"
+                android:padding="40dp"
                 android:visibility="gone">
 
                 <TextView
@@ -117,7 +118,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:paddingHorizontal="16dp"
-                android:paddingTop="16dp"
+                android:paddingTop="12dp"
                 android:paddingBottom="96dp"
                 android:clipToPadding="false"
                 android:scrollbars="none"/>
@@ -136,8 +137,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingHorizontal="20dp"
-                android:paddingTop="20dp"
-                android:paddingBottom="12dp">
+                android:paddingTop="16dp"
+                android:paddingBottom="10dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -154,7 +155,7 @@
                     android:text="Your travel groups"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
-                    android:layout_marginTop="3dp"/>
+                    android:layout_marginTop="2dp"/>
             </LinearLayout>
 
             <View
@@ -169,7 +170,7 @@
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:paddingHorizontal="16dp"
-                android:paddingTop="12dp"
+                android:paddingTop="4dp"
                 android:paddingBottom="96dp"
                 android:clipToPadding="false"
                 android:scrollbars="none"/>
@@ -181,7 +182,7 @@
                 android:layout_weight="1"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="32dp"
+                android:padding="40dp"
                 android:visibility="gone">
 
                 <TextView
@@ -224,8 +225,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingHorizontal="20dp"
-                android:paddingTop="20dp"
-                android:paddingBottom="12dp">
+                android:paddingTop="16dp"
+                android:paddingBottom="10dp">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -241,7 +242,7 @@
                     android:text="Simplified view across all trips"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
-                    android:layout_marginTop="3dp"/>
+                    android:layout_marginTop="2dp"/>
             </LinearLayout>
 
             <View
@@ -262,25 +263,25 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:paddingHorizontal="16dp"
-                    android:paddingTop="12dp"
+                    android:paddingTop="8dp"
                     android:paddingBottom="24dp"/>
             </ScrollView>
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Floating Action Button -->
+    <!-- FAB -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabAddTrip"
         android:layout_width="wrap_content"
-        android:layout_height="54dp"
+        android:layout_height="52dp"
         android:layout_above="@id/bottom_nav"
         android:layout_alignParentEnd="true"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="14dp"
         android:text="New Trip"
         app:icon="@drawable/ic_add"
-        app:iconTint="@color/bg_primary"
-        android:textColor="@color/bg_primary"
+        app:iconTint="@color/text_on_accent"
+        android:textColor="@color/text_on_accent"
         android:textSize="15sp"
         android:textStyle="bold"
         android:textAllCaps="false"

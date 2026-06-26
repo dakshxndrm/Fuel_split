@@ -1,7 +1,8 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Fuel_split" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
-    </style>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The app uses a dark palette by default so DayNight resolves correctly.
+        Add explicit night overrides here only if a value diverges from the base theme.
+    -->
+    <style name="Theme.Fuel_split" parent="Base.Theme.Fuel_split"/>
 </resources>

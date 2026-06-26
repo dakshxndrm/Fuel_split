@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Gas pump main body - using path for rounded rectangle -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M44,20 L64,20 Q70,20 70,26 L70,72 Q70,78 64,78 L44,78 Q38,78 38,72 L38,26 Q38,20 44,20 Z" />
+
+    <!-- Pump nozzle - angled line -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M70,42 L85,28 Q88,25 91,28 L94,31 Q97,34 94,37 L79,51 Z" />
+
+    <!-- Nozzle tip -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M84,26 Q91,26 91,32 Q91,39 84,39 Q77,39 77,32 Q77,26 84,26 Z" />
+
+    <!-- Display screen (dark background) -->
+    <path
+        android:fillColor="#0B0B1A"
+        android:pathData="M42,24 L66,24 Q69,24 69,27 L69,37 Q69,40 66,40 L42,40 Q39,40 39,37 L39,27 Q39,24 42,24 Z" />
+
+    <!-- Display line 1 (price indicator) -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M44,27 L64,27 L64,28 L44,28 Z" />
+
+    <!-- Display line 2 -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M44,31 L64,31 L64,32 L44,32 Z" />
+
+    <!-- Display line 3 -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M44,35 L56,35 L56,36 L44,36 Z" />
+
+    <!-- Start button (gold) -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M42,40 L66,40 Q69,40 69,43 L69,49 Q69,52 66,52 L42,52 Q39,52 39,49 L39,43 Q39,40 42,40 Z" />
+
+    <!-- Button label area -->
+    <path
+        android:fillColor="#0B0B1A"
+        android:pathData="M46,42 L62,42 L62,50 L46,50 Z" />
+
+    <!-- Base/feet of pump -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M42,72 L66,72 Q69,72 69,75 L69,78 Q69,78 66,78 L42,78 Q39,78 39,75 L39,72 Q39,72 42,72 Z" />
+
+    <!-- Left person A (Red) -->
+    <path
+        android:fillColor="#FF6B6B"
+        android:pathData="M28,68 Q23,68 23,73 Q23,78 28,78 Q33,78 33,73 Q33,68 28,68 Z" />
+
+    <!-- Right person B (Teal) -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M80,68 Q75,68 75,73 Q75,78 80,78 Q85,78 85,73 Q85,68 80,68 Z" />
+
+    <!-- Connection line from A to pump (red) -->
+    <path
+        android:fillColor="#FF6B6B"
+        android:pathData="M33,73 L38,73 L38,74 L33,74 Z" />
+
+    <!-- Connection line from B to pump (teal) -->
+    <path
+        android:fillColor="#00C9A7"
+        android:pathData="M75,73 L70,73 L70,74 L75,74 Z" />
+
+</vector>
