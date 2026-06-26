@@ -12,11 +12,11 @@ public final class Config {
             : "https://fuelsplit-faucet.vercel.app/api/fund";
 
     static final String USER_REGISTRY = USE_LOCAL
-            ? "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+            ? "0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1"
             : "0xD81528FFA49c8BA0d725B4bFd3F27C3b63f983Ea";
 
     static final String GROUP_FACTORY = USE_LOCAL
-            ? "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+            ? "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f"
             : "0x97CC2151b535fC1E13D51903D3E4c18D93eF825f";
 
     static final long   CHAIN_ID     = USE_LOCAL ? 31337L : 80002L;
