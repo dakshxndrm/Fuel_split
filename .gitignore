@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Android build output
+build/
+.gradle/
+local.properties
+*.keystore
+*.jks
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Vercel
+.vercel/
+
+# Hardhat artifacts & cache
+artifacts/
+cache/
+typechain-types/
+
+# Claude Code local settings
+.claude/
+
+# Misc
+.DS_Store
+*.log
+_copy_log.txt
+build_output.txt

@@ -1,0 +1,10 @@
+{
+  "name": "fuelsplit-faucet",
+  "version": "1.0.0",
+  "description": "Serverless faucet + friend-code registry for FuelSplit on Polygon Amoy.",
+  "type": "module",
+  "dependencies": {
+    "@upstash/redis": "^1.34.3",
+    "ethers": "^6.13.4"
+  }
+}
